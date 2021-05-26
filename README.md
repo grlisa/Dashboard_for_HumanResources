@@ -1,2 +1,6 @@
 # Dashboard_for_HumanResources
-Assignment for Visualisation Subject: Make a functional and aesthetically correct dashboard using plotly from whatever dataset
+This was my assignment for Visualisation Subject in my 3d year of DataScience degree:
+- The task was designing a functional and aesthetically correct dashboard.
+- The technology used is plotly and flexdashboard in R.
+- The idea is to select appropriate color pallete, forms and composition to create a self explanatory dashboard
+- I used Human Resources Dataset from Kaggle and my Dashboard could be used by Human Resources managers in order to control and prevent employee attrition.
