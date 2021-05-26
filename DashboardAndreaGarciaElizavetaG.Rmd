@@ -1,0 +1,188 @@
+---
+title:  "Dashboard Recursos Humanos"
+sansfont: Arial
+fontsize: 20pt
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    theme: readable
+#tambien me gusta: lumen
+    vertical_layout: scroll
+---
+
+<style>
+
+.chart-title {
+    font-size: 18px;
+}
+
+</style>
+
+
+```{r setup, include=FALSE}
+# Cargar las librerías y hacer las transformaciones necesarias
+library(flexdashboard)
+library(plotly)
+library(ggplot2)
+library(WDI)
+library(purrr)
+library(plyr)
+library(dplyr)
+library(png)
+library(patchwork)
+library(tree)
+library(ggcorrplot)
+#library(corr)
+library(treemapify)
+library(gridExtra)
+library(grid)
+library(crosstalk)
+library(ggthemes)
+
+setwd("/Users/lisagilyarovskaya/Desktop/VIS/plotly/trabajoAcademicoAndreaGarciaElizavetaG/")
+employee = read.csv('WA_Fn-UseC_-HR-Employee-Attrition.csv')
+
+names(employee)[2] = "Left"
+employee$Department = mapvalues(employee$Department, from = c("Sales","Research & Development","Human Resources"), to = c("Sales","Res$Dev","HR"))
+
+employee$Generación <- ifelse(employee$Age<30,"x<30",
+                              ifelse(employee$Age>=31 & employee$Age<55,"30<x<55",
+                                     ifelse(employee$Age>=56 & employee$Age<70,"55<x<70", 'x>70')))
+
+#ordenarValores
+employee$Generación= factor(employee$Generación,
+                            ordered = TRUE,
+                            levels = c("x<30","30<x<55","55<x<70","x>70"),
+                            labels = c("x<30","30<x<55","55<x<70","x>70"))
+tabla_porcentajes <- employee %>% group_by(Left) %>% summarise(Count=n()) %>% mutate(porcentaje=as.factor(round(prop.table(Count),2) * 100))
+
+```
+
+General {data-icon="fa-chart-bar"}
+=============================
+Row {data-width=150}
+--------------------------------------
+
+### Recuento Total
+```{r}
+Recuento= length(unique(employee$EmployeeNumber))
+valueBox(value = Recuento,icon = "fa-users",caption = 'Recuento total', color="#B8CAD9")
+```
+
+### Satisfacción de \n Ambiente de Trabajo Media
+```{r}
+rating <- round(mean(employee$EnvironmentSatisfaction),2)
+gauge(rating, min = 1, max = 5, gaugeSectors(
+  success = c(4:5), warning = c(2:3), danger = c(1:2), colors = c('#8A97BF','#8A97BF','#B8CAD9')
+))
+```
+
+### Satisfacción de Trabajo Media 
+```{r}
+rating <- round(mean(employee$JobSatisfaction),2)
+valueBox(value = rating,icon = "fa-meh",caption = 'Satisfacción de Trabajo Media', color="#CCC3DA")
+```
+
+
+Row
+----------------------------------
+
+### Generaciones y géneros
+```{r}
+interactive= employee %>% group_by(Generación, YearsAtCompany,Gender) %>% filter(YearsAtCompany <= 15) %>% summarize(Cantidad=n()) %>%   
+  plot_ly(x = ~Generación, y = ~Cantidad, color=~Gender, colors=c('#580F59','#8A97BF')) %>%   
+  add_bars(frame=~YearsAtCompany, ids=~Generación, text=~paste("n= ", Cantidad), hoverinfo="text") %>%  
+  animation_opts(frame = 1000) %>% 
+  layout(title="Qué generación y qué género son los que \n más años se quedan en la empresa?", titlefont=list(size=12)) %>%
+  animation_slider(currentvalue = list(prefix = "Años en la Empresa ", font = list(size=10,color="grey")))
+  
+
+interactive
+```
+
+### Empleados por cargo
+```{r}
+role.amount = employee %>% group_by(JobRole) %>% summarize(amount=n()) %>%
+  ggplot(aes(area=amount, label=JobRole, fill=JobRole)) +  geom_treemap() +
+  geom_treemap_text(grow = T, reflow = T, colour = "black") +
+  scale_fill_brewer(palette = "BuPu") +  
+  theme(legend.position = "none") + 
+  labs(fill = "JobRole")
+role.amount
+
+
+```
+
+Perfil del Trabajador que se ha ido {data-icon="fa-user-tag"}
+=============================
+
+Column {data-width=650 .tabset}
+-----------------------------------------------------------------------
+
+### Salario mensual por nivel de satisfacción 
+
+```{r}
+income_satis <- employee %>% select(JobSatisfaction, MonthlyIncome, Left) %>% 
+  filter(Left=="Yes") %>%
+  group_by(JobSatisfaction, Left) %>%
+  ggplot(aes(x=MonthlyIncome)) + 
+  geom_area(aes(fill=factor(JobSatisfaction)), stat ="bin", bins=100, alpha=0.8) +   
+  #facet_wrap(~Left) +
+  scale_fill_manual(values=c("#8A208C", "#8946A6", "#8A97BF", "#A0BED9")) + 
+  theme_tufte() +
+  theme(legend.title = element_blank()) +
+  labs(x="Salario mensual", y="Cantidad")
+
+ggplotly(income_satis)
+```
+
+### Satisfacción Media del Ambiente
+
+```{r}
+env_attr = employee %>% select(EnvironmentSatisfaction, JobRole, Left) %>% 
+          group_by(JobRole, Left) %>%
+          summarize(media_amb=mean(EnvironmentSatisfaction))
+
+p <- ggplot(env_attr, aes(x=JobRole, y=media_amb)) + 
+      geom_line(aes(group=Left), color="#8946A6", linetype="dashed") +
+      geom_point(aes(color=Left), size=3) + theme_tufte() +   
+      theme(plot.title=element_text(hjust=0.5), axis.text.x=element_text(angle=90)) +
+      labs(y="Satisfacción de Ambiente Media", x="") + 
+      scale_color_manual(values=c("#580F59", "#8A97BF"))
+
+ggplotly(p)
+```
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Estado Civil
+
+```{r}
+marital <- employee %>% filter(Left == "Yes") %>% 
+  ggplot(aes(MaritalStatus)) + 
+  geom_bar(fill='#8946A6') + 
+  labs(y="Cantidad") +
+  theme_tufte() +
+  labs(x = "")
+
+ggplotly(marital) 
+```
+
+### Brecha salarial de género
+
+```{r}
+gender <- employee %>% filter(Left == "Yes") %>% 
+  ggplot(aes(x=Gender, y=MonthlyIncome, color=Gender, fill=Gender)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values=c("#8A208C", "#A0BED9")) + 
+  scale_color_manual(values=c("#580F59", "#8A97BF")) +
+  coord_flip() +
+  theme_tufte() +
+  theme(legend.title = element_blank())+
+  labs(x = "", y = "Salario Mensual")
+
+ggplotly(gender)
+```
+
